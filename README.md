@@ -34,10 +34,12 @@ As fontes são **plugáveis** e consultadas por ordem de prioridade. O fallback 
 |---|---|---|---|---|
 | 1ª | **AnimesROLL** | `www.anroll.info` | HLS (`.m3u8`) | sim (`-dublado`) |
 | 2ª | **AnimeFire** | `animefire.io` | MP4 direto | sim (`-dublado`) |
+| 3ª | **AnimesDigital** | `animesdigital.org` | HLS (`.m3u8`) | sim |
+| 4ª | **TopAnimes** | `topanimes.net` | HLS (`.m3u8`) | sim |
 
-Por padrão `sources="anroll animefire"`. Dá pra reordenar ou restringir com a env `ANI_CLI_SOURCES` (veja abaixo).
+Por padrão `sources="anroll animefire animesdigital topanimes"`. O fallback é por anime: a primeira fonte que tiver o título serve; as demais entram para títulos que faltam. Dá pra reordenar ou restringir com a env `ANI_CLI_SOURCES` (veja abaixo).
 
-> O AnimeFire pode retornar **HTTP 401** no vídeo dependendo do IP/região (a busca funciona, mas o vídeo é bloqueado). Por isso o AnimesROLL vem primeiro.
+> A base default do AnimeFire é `animefire.io`. O antigo `animefire.plus` redireciona para `.io`, mas o CDN do vídeo valida o *Referer* pela string exata — usar `.plus` causava **HTTP 401** no vídeo. Se você sobrescrever `ANI_CLI_ANIMEFIRE_BASE`, use o domínio para o qual o site resolve de fato.
 
 ## Dependências
 
