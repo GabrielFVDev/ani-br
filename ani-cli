@@ -420,7 +420,7 @@ play() {
 agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0"
 animefire_base="${ANI_CLI_ANIMEFIRE_BASE:-https://animefire.plus}"
 anroll_base="${ANI_CLI_ANROLL_BASE:-https://www.anroll.info}"
-sources="${ANI_CLI_SOURCES:-animefire anroll}"
+sources="${ANI_CLI_SOURCES:-anroll animefire}"
 mode="${ANI_CLI_MODE:-sub}"
 download_dir="${ANI_CLI_DOWNLOAD_DIR:-.}"
 log_episode="${ANI_CLI_LOG:-1}"
