@@ -176,6 +176,14 @@ get_episode_url() {
         [ -z "$links" ] && die "Episodio nao disponivel!"
     fi
     select_quality "$quality"
+    # referer = base da fonte + "/" (alguns CDNs exigem; inofensivo nos demais)
+    eval "_base=\"\${${_src}_base:-}\""
+    if [ -n "$_base" ]; then
+        refr_flag="--referrer=${_base}/"
+        m3u8_refr="${_base}/"
+    else
+        unset refr_flag
+    fi
 }
 
 select_quality() {
@@ -187,10 +195,6 @@ select_quality() {
     [ -z "$result" ] && printf "Qualidade '%s' nao encontrada, usando a melhor disponivel\n" "$1" 1>&2 && result=$(printf "%s" "$links" | head -n1)
 
     episode=$(printf "%s" "$result" | cut -d'>' -f2)
-    case "$episode" in
-        *lightspeedst* | *animefire*) refr_flag="--referrer=$animefire_base/" ;;
-        *) unset refr_flag ;;
-    esac
 }
 
 # --- Fonte: AnimeFire (animefire.plus) ---
@@ -223,6 +227,56 @@ animefire_episode_url() {
     printf '%s' "$_resp" | grep -q '"status":"200"' || return 0
     # data[].src ja e link direto (.mp4/.m3u8 do lightspeedst; googlevideo p/ Blogger)
     printf '%s' "$_resp" | jq -r '.data[]? | "\(.label) >\(.src)"' 2>/dev/null | sort -nr
+}
+
+# --- Fonte: AnimesROLL (anroll.info) ---
+# Busca: /search/?q={q}; Serie: /anime/{slug}
+# Episodio: /anime/{slug}/temporada-{T}/episodio-{NNN}; o video e um HLS .m3u8
+# montado a partir do urlConfig (texto puro) da pagina do episodio.
+
+# lista ordenada (ordem de exibicao) dos fragmentos temporada-T/episodio-N da serie
+_anroll_eplist() {
+    curl -sL -A "$agent" "$anroll_base/anime/$1" |
+        grep -oE 'temporada-[0-9]+/episodio-[0-9]+' | sort -u |
+        sed -E 's|temporada-([0-9]+)/episodio-([0-9]+)|\1 \2 &|' |
+        sort -k1,1n -k2,2n | sed 's|^[0-9]* [0-9]* ||'
+}
+
+anroll_search() {
+    # titulo/tag derivados do slug (o data-title do site e inconsistente e nao marca dublado)
+    curl -sL -A "$agent" "$anroll_base/search/?q=$1" |
+        grep -oE 'href="[^"]*/anime/[a-z0-9-]+"' |
+        sed -E 's|.*/anime/([a-z0-9-]+)".*|\1|' | sort -u |
+        while IFS= read -r _slug; do
+            if [ "$mode" = "dub" ]; then
+                case "$_slug" in *-dublado) ;; *) continue ;; esac
+            fi
+            case "$_slug" in
+                *-dublado) _tag=" (Dublado)" ;;
+                *-legendado) _tag=" (Legendado)" ;;
+                *) _tag="" ;;
+            esac
+            _name=$(printf '%s' "$_slug" | sed -E 's/-(dublado|legendado)$//; s/-/ /g')
+            printf '%s\t%s%s\n' "$_slug" "$_name" "$_tag"
+        done
+}
+
+anroll_episodes() {
+    # indice global 1..N (temporadas achatadas em ordem de exibicao)
+    _anroll_eplist "$1" | grep -n '' | cut -d: -f1
+}
+
+anroll_episode_url() {
+    # $1 = slug, $2 = indice global do episodio (1..N)
+    _frag=$(_anroll_eplist "$1" | sed -n "${2}p")
+    [ -z "$_frag" ] && return 0
+    _html=$(curl -sL -A "$agent" -e "$anroll_base/" "$anroll_base/anime/$1/$_frag")
+    _b=$(printf '%s' "$_html" | grep -oE 'base: *"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)".*/\1/')
+    _t=$(printf '%s' "$_html" | grep -oE 'temporada: *[0-9]+' | head -1 | grep -oE '[0-9]+')
+    _e=$(printf '%s' "$_html" | grep -oE 'episodio: *[0-9]+' | head -1 | grep -oE '[0-9]+')
+    { [ -z "$_b" ] || [ -z "$_t" ] || [ -z "$_e" ]; } && return 0
+    _p=$(printf '%s' "$1" | cut -c1 | tr 'a-z' 'A-Z')
+    printf 'HLS >%s/%s/%s/%02d-temporada/%02d/stream.m3u8\n' "$_b" "$_p" "$1" "$_t" "$_e"
 }
 
 time_until_next_ep() {
@@ -365,7 +419,8 @@ play() {
 # setup
 agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0"
 animefire_base="${ANI_CLI_ANIMEFIRE_BASE:-https://animefire.plus}"
-sources="${ANI_CLI_SOURCES:-animefire}"
+anroll_base="${ANI_CLI_ANROLL_BASE:-https://www.anroll.info}"
+sources="${ANI_CLI_SOURCES:-animefire anroll}"
 mode="${ANI_CLI_MODE:-sub}"
 download_dir="${ANI_CLI_DOWNLOAD_DIR:-.}"
 log_episode="${ANI_CLI_LOG:-1}"
