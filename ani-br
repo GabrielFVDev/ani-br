@@ -521,7 +521,10 @@ play() {
         play_episode
     fi
     # moves up to stored position and deletes to end
-    [ "$player_function" != "debug" ] && [ "$player_function" != "download" ] && tput rc && tput ed
+    # (skipped with --no-detach: the whole point of that flag is to keep the
+    # player's own terminal output visible, e.g. mpv errors when it fails to
+    # open a stream — wiping it here would hide exactly what --no-detach is for)
+    [ "$player_function" != "debug" ] && [ "$player_function" != "download" ] && [ "$no_detach" != 1 ] && tput rc && tput ed
 }
 
 # MAIN
