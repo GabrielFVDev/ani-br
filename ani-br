@@ -408,7 +408,7 @@ time_until_next_ep() {
 process_hist_entry() {
     ep_list=$(episodes_list "$id")
     latest_ep=$(printf "%s\n" "$ep_list" | tail -n1)
-    title=$(printf "%s\n" "$title" | sed "s|[0-9]\+ episodes|${latest_ep} episodes|")
+    title=$(printf "%s\n" "$title" | sed -E "s|[0-9]+ episodes|${latest_ep} episodes|")
     ep_no=$(printf "%s" "$ep_list" | sed -n "/^${ep_no}$/{n;p;}") 2>/dev/null
     [ -n "$ep_no" ] && printf "%s\t%s - episode %s\n" "$id" "$title" "$ep_no"
 }
