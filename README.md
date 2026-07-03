@@ -49,7 +49,22 @@ Por padrão `sources="animesdigital anroll animefire topanimes"`. O fallback é 
 
 **Opcional (pular abertura):** [`ani-skip`](https://github.com/synacktraa/ani-skip) (só com mpv).
 
-Exemplos de instalação das dependências:
+## Instalação
+
+`ani-br` é um único script POSIX — instalar é baixar o arquivo, dar permissão
+de execução e colocar no `PATH`. O passo comum a todo sistema:
+
+```sh
+git clone https://github.com/GabrielFV/ani-br.git
+cp ani-br/ani-br ~/.local/bin/     # ou: sudo cp ani-br/ani-br /usr/local/bin/
+rm -rf ani-br
+chmod +x ~/.local/bin/ani-br       # ajuste o caminho se usou /usr/local/bin
+```
+
+O que muda por sistema é só a instalação das dependências e, no Windows, como
+o player é executado. Escolha seu ambiente abaixo.
+
+### Linux
 
 ```sh
 # Debian/Ubuntu
@@ -62,25 +77,50 @@ sudo pacman -S curl sed grep jq fzf mpv
 sudo dnf install curl sed grep jq fzf mpv
 ```
 
-## Instalação
+Roda direto, sem ajustes — é o ambiente de referência do script.
 
-A partir do código-fonte:
-
-```sh
-git clone https://github.com/GabrielFV/ani-br.git
-sudo cp ani-br/ani-br /usr/local/bin/
-rm -rf ani-br
-```
-
-Ou, sem `sudo`, em `~/.local/bin` (garanta que está no `PATH`):
+### macOS
 
 ```sh
-git clone https://github.com/GabrielFV/ani-br.git
-cp ani-br/ani-br ~/.local/bin/
-rm -rf ani-br
+brew install curl jq fzf ffmpeg aria2
+brew install --cask iina   # player recomendado no macOS; alternativas: mpv, vlc
 ```
 
-Confirme que o arquivo está executável (`chmod +x ani-br`) e rode `ani-br`.
+`sed`/`grep`/`awk` do sistema (BSD) já são compatíveis com o script. O
+`ani-br` detecta o macOS via `uname` e usa o IINA automaticamente se
+instalado (`ANI_CLI_PLAYER` sobrescreve).
+
+### Windows
+
+Não existe porta nativa para cmd/PowerShell — é um shell script POSIX. Duas
+formas de rodar, em ordem de facilidade:
+
+**WSL2 (recomendado).** É uma distro Linux de verdade: instale o WSL2
+(`wsl --install` no PowerShell, como administrador), abra a distro e siga as
+instruções de Linux acima (`apt`/`pacman`/`dnf`) e o passo de instalação do
+início desta seção. Para o player, duas opções:
+
+```sh
+# opção A: mpv dentro do WSL (Windows 11 com WSLg abre a janela normalmente)
+sudo apt install mpv
+
+# opção B: usar o mpv do Windows host a partir do WSL
+export ANI_CLI_PLAYER=mpv.exe   # requer mpv.exe no PATH do Windows
+```
+
+**Git Bash / MSYS2 (sem WSL).** Instale o [MSYS2](https://www.msys2.org/),
+abra um terminal MSYS2 ou o Git Bash, e instale as dependências:
+
+```sh
+pacman -S curl jq fzf sed grep mingw-w64-x86_64-mpv
+```
+
+Depois siga o passo comum de instalação no topo desta seção (o `git clone` e
+`cp` funcionam igual dentro do MSYS2/Git Bash). O script detecta esse
+ambiente sozinho (via `uname`) e troca automaticamente para `mpv.exe`/
+`vlc.exe`/`syncplay.exe` — só garanta que o `.exe` do player está no `PATH`
+do Windows. O `fzf` interativo precisa de um terminal com TTY (Windows
+Terminal ou mintty funcionam; `cmd.exe` puro não).
 
 ## Uso
 

@@ -543,7 +543,7 @@ quality="${ANI_CLI_QUALITY:-best}"
 case "$(uname -a | cut -d " " -f 1,3-)" in
     *Darwin*) player_function="${ANI_CLI_PLAYER:-$(where_iina)}" ;;   # mac OS
     *ndroid*) player_function="${ANI_CLI_PLAYER:-android_mpv}" ;;     # Android OS (termux)
-    *MINGW* | *WSL2*) player_function="${ANI_CLI_PLAYER:-mpv.exe}" ;; # Windows OS
+    *MINGW* | *MSYS* | *WSL2*) player_function="${ANI_CLI_PLAYER:-mpv.exe}" ;; # Windows OS
     *ish*) player_function="${ANI_CLI_PLAYER:-iSH}" ;;                # iOS (iSH)
     *) player_function="${ANI_CLI_PLAYER:-$(where_mpv)}" ;;           # Linux OS
 esac
@@ -568,7 +568,7 @@ while [ $# -gt 0 ]; do
         -v | --vlc)
             case "$(uname -a | cut -d " " -f 1,3-)" in
                 *ndroid*) player_function="android_vlc" ;;
-                MINGW* | *WSL2*) player_function="vlc.exe" ;;
+                MINGW* | *MSYS* | *WSL2*) player_function="vlc.exe" ;;
                 *ish*) player_function="iSH" ;;
                 *) player_function="vlc" ;;
             esac
@@ -576,7 +576,7 @@ while [ $# -gt 0 ]; do
         -s | --syncplay)
             case "$(uname -s)" in
                 Darwin*) player_function="/Applications/Syncplay.app/Contents/MacOS/syncplay" ;;
-                MINGW* | *Msys)
+                MINGW* | MSYS*)
                     export PATH="$PATH":"/c/Program Files (x86)/Syncplay/"
                     player_function="syncplay.exe"
                     ;;
