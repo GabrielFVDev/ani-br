@@ -8,6 +8,12 @@ Assista anime <b>dublado e legendado em pt-br</b> direto do terminal, sem anúnc
 Fork brasileiro do <a href="https://github.com/pystardust/ani-cli">ani-cli</a>, adaptado para raspar fontes nacionais.
 </p>
 
+<p align="center">
+<img alt="Shell: POSIX sh" src="https://img.shields.io/badge/shell-POSIX%20sh-4EAA25?logo=gnubash&logoColor=white">
+<img alt="Plataformas: Linux, macOS, Windows" src="https://img.shields.io/badge/plataformas-Linux%20%7C%20macOS%20%7C%20Windows-blue">
+<img alt="Licença: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-lightgrey">
+</p>
+
 ---
 
 ## Índice
@@ -66,6 +72,8 @@ o player é executado. Escolha seu ambiente abaixo.
 
 ### Linux
 
+Ambiente de referência do script — roda direto, sem ajustes.
+
 ```sh
 # Debian/Ubuntu
 sudo apt install curl sed grep jq fzf mpv
@@ -77,50 +85,36 @@ sudo pacman -S curl sed grep jq fzf mpv
 sudo dnf install curl sed grep jq fzf mpv
 ```
 
-Roda direto, sem ajustes — é o ambiente de referência do script.
-
 ### macOS
 
 ```sh
 brew install curl jq fzf ffmpeg aria2
-brew install --cask iina   # player recomendado no macOS; alternativas: mpv, vlc
+brew install --cask iina   # player recomendado; alternativas: mpv, vlc
 ```
 
-`sed`/`grep`/`awk` do sistema (BSD) já são compatíveis com o script. O
-`ani-br` detecta o macOS via `uname` e usa o IINA automaticamente se
-instalado (`ANI_CLI_PLAYER` sobrescreve).
+- `sed`/`grep`/`awk` do sistema (BSD) já são compatíveis com o script.
+- O `ani-br` detecta o macOS via `uname` e usa o IINA automaticamente se
+  instalado (`ANI_CLI_PLAYER` sobrescreve).
 
 ### Windows
 
-Não existe porta nativa para cmd/PowerShell — é um shell script POSIX. Duas
-formas de rodar, em ordem de facilidade:
+Não existe porta nativa para cmd/PowerShell — é um shell script POSIX, então
+roda dentro de um ambiente POSIX. Duas opções, em ordem de facilidade:
 
-**WSL2 (recomendado).** É uma distro Linux de verdade: instale o WSL2
-(`wsl --install` no PowerShell, como administrador), abra a distro e siga as
-instruções de Linux acima (`apt`/`pacman`/`dnf`) e o passo de instalação do
-início desta seção. Para o player, duas opções:
+<table>
+<tr><th></th><th>WSL2 (recomendado)</th><th>Git Bash / MSYS2</th></tr>
+<tr><td><b>Por quê</b></td><td>é uma distro Linux de verdade</td><td>não precisa instalar o WSL</td></tr>
+<tr><td><b>Setup</b></td><td><code>wsl --install</code> no PowerShell (admin)</td><td>instalar o <a href="https://www.msys2.org/">MSYS2</a></td></tr>
+<tr><td><b>Deps</b></td><td><code>apt</code>/<code>pacman</code>/<code>dnf</code> (igual Linux acima)</td><td><code>pacman -S curl jq fzf sed grep mingw-w64-x86_64-mpv</code></td></tr>
+<tr><td><b>Player</b></td><td>mpv dentro do WSL (WSLg no Win11 abre a janela) ou <code>ANI_CLI_PLAYER=mpv.exe</code> apontando pro host</td><td><code>mpv.exe</code>/<code>vlc.exe</code>/<code>syncplay.exe</code> — detectado sozinho via <code>uname</code></td></tr>
+</table>
 
-```sh
-# opção A: mpv dentro do WSL (Windows 11 com WSLg abre a janela normalmente)
-sudo apt install mpv
+Depois, em ambos os casos, o passo comum de instalação no topo desta seção
+(`git clone` + `cp`) funciona sem alteração.
 
-# opção B: usar o mpv do Windows host a partir do WSL
-export ANI_CLI_PLAYER=mpv.exe   # requer mpv.exe no PATH do Windows
-```
-
-**Git Bash / MSYS2 (sem WSL).** Instale o [MSYS2](https://www.msys2.org/),
-abra um terminal MSYS2 ou o Git Bash, e instale as dependências:
-
-```sh
-pacman -S curl jq fzf sed grep mingw-w64-x86_64-mpv
-```
-
-Depois siga o passo comum de instalação no topo desta seção (o `git clone` e
-`cp` funcionam igual dentro do MSYS2/Git Bash). O script detecta esse
-ambiente sozinho (via `uname`) e troca automaticamente para `mpv.exe`/
-`vlc.exe`/`syncplay.exe` — só garanta que o `.exe` do player está no `PATH`
-do Windows. O `fzf` interativo precisa de um terminal com TTY (Windows
-Terminal ou mintty funcionam; `cmd.exe` puro não).
+> O player `.exe` precisa estar no `PATH` do Windows, e o `fzf` interativo
+> precisa de um terminal com TTY (Windows Terminal ou mintty funcionam;
+> `cmd.exe` puro não).
 
 ## Uso
 
