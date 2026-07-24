@@ -18,88 +18,43 @@ Fork brasileiro do <a href="https://github.com/pystardust/ani-cli">ani-cli</a>, 
 
 ---
 
-## Índice
-
-- [O que é](#o-que-é)
-- [Instalação](#instalação)
-  - [Linux](#linux)
-  - [macOS](#macos)
-  - [Windows](#windows)
-- [Uso](#uso)
-- [Fontes suportadas](#fontes-suportadas)
-- [Configuração](#configuração)
-- [Solução de problemas](#solução-de-problemas)
-- [Contribuindo: adicionar uma fonte](#contribuindo-adicionar-uma-fonte)
-- [Crédito e licença](#crédito-e-licença)
-
-## O que é
-
-`ani-br` é um script de terminal para buscar e assistir anime, sem passar por site nenhum:
-
-- Busca o título, escolhe o episódio e abre direto num player de vídeo (mpv por padrão) — sem navegador, sem anúncio, sem pop-up.
-- Cobre **dublado e legendado em pt-br**, puxando de sites de streaming brasileiros.
-- Se uma fonte não tiver o título, tenta a próxima automaticamente (veja [Fontes suportadas](#fontes-suportadas)).
-- Roda em Linux, macOS e Windows (veja [Instalação](#instalação)).
-
-É um fork do [ani-cli](https://github.com/pystardust/ani-cli): a base do projeto (interface, player, histórico) é a mesma; o que muda é que toda a camada de scraping foi trocada do site original em inglês por fontes pt-br.
-
 ## Instalação
-
-`ani-br` é um único arquivo — instalar é baixar, dar permissão de execução e colocar no `PATH`:
 
 ```sh
 git clone https://github.com/GabrielFV/ani-br.git
 cp ani-br/ani-br ~/.local/bin/     # ou: sudo cp ani-br/ani-br /usr/local/bin/
 rm -rf ani-br
-chmod +x ~/.local/bin/ani-br       # ajuste o caminho se usou /usr/local/bin
+chmod +x ~/.local/bin/ani-br
 ```
 
-Isso é igual em qualquer sistema. O que muda é **instalar as dependências**, que são as mesmas em todo lugar, só troca o gerenciador de pacotes:
-
-**Obrigatórias:** `curl`, `sed`, `grep`, `jq`, `fzf`, e um player (`mpv` recomendado).
-**Opcionais:** `aria2c` (download mp4) ou `yt-dlp`/`ffmpeg` (download HLS/m3u8); [`ani-skip`](https://github.com/synacktraa/ani-skip) para pular abertura (só com mpv).
-
-Escolha seu sistema abaixo para os comandos exatos.
+**Dependências:** `curl`, `sed`, `grep`, `jq`, `fzf`, e um player (`mpv` recomendado).
+**Opcionais:** `aria2c` (download mp4), `yt-dlp`/`ffmpeg` (download HLS), [`ani-skip`](https://github.com/synacktraa/ani-skip) (pular abertura, só mpv).
 
 ### Linux
 
-Ambiente de referência do script — roda direto, sem ajustes.
-
 ```sh
-# Debian/Ubuntu
-sudo apt install curl sed grep jq fzf mpv
-
-# Arch
-sudo pacman -S curl sed grep jq fzf mpv
-
-# Fedora
-sudo dnf install curl sed grep jq fzf mpv
+sudo apt install curl sed grep jq fzf mpv     # Debian/Ubuntu
+sudo pacman -S curl sed grep jq fzf mpv       # Arch
+sudo dnf install curl sed grep jq fzf mpv     # Fedora
 ```
 
 ### macOS
 
 ```sh
 brew install curl jq fzf ffmpeg aria2
-brew install --cask iina   # player recomendado; alternativas: mpv, vlc
+brew install --cask iina   # ou mpv, vlc
 ```
 
-`sed`/`grep`/`awk` do sistema (BSD) já são compatíveis com o script. O `ani-br` detecta o macOS via `uname` e usa o IINA automaticamente se instalado (`ANI_CLI_PLAYER` sobrescreve).
+O script detecta macOS via `uname` e usa o IINA automaticamente se instalado (`ANI_CLI_PLAYER` sobrescreve).
 
 ### Windows
 
-Não existe porta nativa para cmd/PowerShell — é um shell script POSIX, então roda dentro de um ambiente POSIX. Duas opções, em ordem de facilidade:
+Sem porta nativa — roda dentro de um ambiente POSIX:
 
-<table>
-<tr><th></th><th>WSL2 (recomendado)</th><th>Git Bash / MSYS2</th></tr>
-<tr><td><b>Por quê</b></td><td>é uma distro Linux de verdade</td><td>não precisa instalar o WSL</td></tr>
-<tr><td><b>Setup</b></td><td><code>wsl --install</code> no PowerShell (admin)</td><td>instalar o <a href="https://www.msys2.org/">MSYS2</a></td></tr>
-<tr><td><b>Deps</b></td><td><code>apt</code>/<code>pacman</code>/<code>dnf</code> (igual Linux acima)</td><td><code>pacman -S curl jq fzf sed grep mingw-w64-x86_64-mpv</code></td></tr>
-<tr><td><b>Player</b></td><td>mpv dentro do WSL (WSLg no Win11 abre a janela) ou <code>ANI_CLI_PLAYER=mpv.exe</code> apontando pro host</td><td><code>mpv.exe</code>/<code>vlc.exe</code>/<code>syncplay.exe</code> — detectado sozinho via <code>uname</code></td></tr>
-</table>
+- **WSL2** (recomendado): `wsl --install`, depois siga os comandos do Linux acima.
+- **Git Bash/MSYS2**: instale o [MSYS2](https://www.msys2.org/), depois `pacman -S curl jq fzf sed grep mingw-w64-x86_64-mpv`.
 
-Depois, em ambos os casos, o passo comum de instalação no topo desta seção (`git clone` + `cp`) funciona sem alteração.
-
-> O player `.exe` precisa estar no `PATH` do Windows, e o `fzf` interativo precisa de um terminal com TTY (Windows Terminal ou mintty funcionam; `cmd.exe` puro não).
+Em ambos, a instalação do `ani-br` acima funciona sem alteração. O player precisa estar no `PATH` e o terminal precisa ter TTY (Windows Terminal e mintty funcionam; `cmd.exe` puro não).
 
 ## Uso
 
@@ -118,7 +73,7 @@ Durante a reprodução, o menu permite `next` / `previous` / `replay` / `select`
 
 ## Fontes suportadas
 
-As fontes são plugáveis e consultadas por ordem de prioridade. O fallback é **por anime**: se a primeira fonte não tiver o título, a próxima é tentada automaticamente.
+Consultadas em ordem de prioridade, com fallback automático por anime:
 
 | Prioridade | Fonte | Domínio | Vídeo | Dublado |
 |---|---|---|---|---|
@@ -127,32 +82,31 @@ As fontes são plugáveis e consultadas por ordem de prioridade. O fallback é *
 | 3ª | **AnimeFire** | `animefire.io` | MP4 direto | sim (`-dublado`) |
 | 4ª | **TopAnimes** | `topanimes.net` | HLS (`.m3u8`) | sim |
 
-Por padrão `sources="animesdigital anroll animefire topanimes"`. Dá pra reordenar ou restringir com a variável `ANI_CLI_SOURCES` (veja [Configuração](#configuração)).
-
-> A base default do AnimeFire é `animefire.io`. O antigo `animefire.plus` redireciona para `.io`, mas o CDN do vídeo valida o *Referer* pela string exata — usar `.plus` causava **HTTP 401** no vídeo. Se você sobrescrever `ANI_CLI_ANIMEFIRE_BASE`, use o domínio para o qual o site resolve de fato.
+Reordene ou restrinja com `ANI_CLI_SOURCES` (veja [Configuração](#configuração)).
 
 ## Configuração
 
-Todas as opções também podem ser fixadas por variável de ambiente (prefixo `ANI_CLI_`, mantido por compatibilidade com o upstream). As mais úteis:
+Opções fixáveis por variável de ambiente (prefixo `ANI_CLI_`):
 
 | Variável | Para quê |
 |---|---|
-| `ANI_CLI_SOURCES` | Ordem/seleção de fontes. Ex.: `ANI_CLI_SOURCES="anroll" ani-br ...` força só o AnimesROLL |
-| `ANI_CLI_PLAYER` | Player a usar. Ex.: `export ANI_CLI_PLAYER=mpv` força o mpv nativo |
+| `ANI_CLI_SOURCES` | Ordem/seleção de fontes. Ex.: `ANI_CLI_SOURCES="anroll" ani-br ...` |
+| `ANI_CLI_PLAYER` | Player a usar. Ex.: `export ANI_CLI_PLAYER=mpv` |
 | `ANI_CLI_QUALITY` | Qualidade padrão (`best`/`worst`/`720`...) |
 | `ANI_CLI_MODE` | `sub` (padrão) ou `dub` |
 | `ANI_CLI_DOWNLOAD_DIR` | Pasta de download |
 
 ## Solução de problemas
 
-- **Roda no terminal mas nenhuma janela abre.** Geralmente o `mpv` escolhido é o do flatpak (sandbox não abre janela). Force o nativo: `export ANI_CLI_PLAYER=mpv`. Para ver o erro real, use `ani-br --no-detach`.
-- **`permissão negada` ao rodar.** Falta o bit de execução: `chmod +x ani-br`.
-- **`No results found` numa fonte.** O fallback por-anime tenta a próxima fonte automaticamente; se nenhuma tiver o título, ele não existe nos catálogos.
-- **Não rode `ani-br -U`.** O auto-update aponta para o repositório do upstream e **sobrescreveria este fork**.
+- **Nenhuma janela abre.** O `mpv` provavelmente é o do flatpak (sandbox). Force o nativo: `export ANI_CLI_PLAYER=mpv`. Para ver o erro real: `ani-br --no-detach`.
+- **`permissão negada` ao rodar.** `chmod +x ani-br`.
+- **`No results found` numa fonte.** O fallback tenta a próxima fonte sozinho; se nenhuma tiver o título, ele não está nos catálogos.
+- **HTTP 401 em vídeo do AnimeFire.** Se você fixou `ANI_CLI_ANIMEFIRE_BASE` para `.plus`, troque para `animefire.io`.
+- **Não rode `ani-br -U`.** O auto-update aponta para o upstream e sobrescreveria este fork.
 
 ## Contribuindo: adicionar uma fonte
 
-A arquitetura é plugável. Cada fonte é um trio de funções com o mesmo contrato:
+Cada fonte é um trio de funções:
 
 ```
 <fonte>_search "<consulta>"        -> linhas: id_nativo<TAB>título
@@ -160,10 +114,8 @@ A arquitetura é plugável. Cada fonte é um trio de funções com o mesmo contr
 <fonte>_episode_url "<id>" "<ep>"  -> linhas: <qualidade> ><url>
 ```
 
-Defina também `<fonte>_base="https://..."` (usado como referer) e acrescente o nome em `sources`. Os dispatchers (`search_anime`/`episodes_list`/`get_episode_url`) cuidam do resto, carimbando o id com `<fonte>:` para o histórico e o fallback funcionarem. Veja `animefire_*` e `anroll_*` como referência.
+Defina `<fonte>_base="https://..."` e adicione o nome em `sources`. Veja `animefire_*` e `anroll_*` como referência.
 
 ## Crédito e licença
 
-Fork de [pystardust/ani-cli](https://github.com/pystardust/ani-cli). Todo o crédito da base (UI, playback, histórico, multiplataforma) é da equipe original.
-
-Licenciado sob a **GNU GPL v3.0** — veja [LICENSE](./LICENSE). Uso por sua conta e risco; veja o [disclaimer](./disclaimer.md).
+Fork de [pystardust/ani-cli](https://github.com/pystardust/ani-cli). GNU GPL v3.0 — veja [LICENSE](./LICENSE) e o [disclaimer](./disclaimer.md).
