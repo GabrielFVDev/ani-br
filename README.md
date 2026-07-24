@@ -1,4 +1,6 @@
-<h1 align="center">ani-br</h1>
+<h1 align="center">
+<img alt="Ani BR" src="https://img.shields.io/badge/%F0%9F%93%BA%20Ani%20BR-FF6B35?style=for-the-badge" height="50">
+</h1>
 
 <p align="center">
 Assista anime <b>dublado e legendado em pt-br</b> direto do terminal, sem anúncio.
