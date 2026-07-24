@@ -21,7 +21,7 @@ Fork brasileiro do <a href="https://github.com/pystardust/ani-cli">ani-cli</a>, 
 ## Instalação
 
 ```sh
-git clone https://github.com/GabrielFV/ani-br.git
+git clone https://github.com/GabrielFVDev/ani-br.git
 cp ani-br/ani-br ~/.local/bin/     # ou: sudo cp ani-br/ani-br /usr/local/bin/
 rm -rf ani-br
 chmod +x ~/.local/bin/ani-br
