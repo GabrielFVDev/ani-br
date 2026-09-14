@@ -142,6 +142,7 @@ cleanup() {
     [ "$player_function" = "android_mpv" ] && : >"/storage/emulated/0/mpv/mpv.config.mp4"
     printf "\033[0m"        # clears colors
     rm -f "${histfile}.new" # remove temp logfile
+    [ -n "$hls_dir" ] && rm -rf "$hls_dir" # playlists HLS temporarias (AnimeFire)
 }
 
 # SCRAPING
@@ -153,13 +154,28 @@ cleanup() {
 # Os dispatchers abaixo percorrem $sources por prioridade e carimbam o id com
 # "<fonte>:", para que historico (-c) e fallback saibam a origem.
 
+# A busca consulta TODAS as fontes e concatena, na ordem de prioridade. Parar na
+# primeira que respondesse escondia series que so existem nas fontes seguintes
+# (ex.: uma fonte casa apenas o filme e mascara a serie completa da fonte 4).
+# O titulo recebe o sufixo " [fonte]" so quando ha mais de uma fonte em jogo: o
+# menu (nth) exibe apenas o titulo, entao sem isso homonimos de fontes
+# diferentes ficam indistinguiveis. O sufixo e retirado depois da selecao, para
+# nao vazar no historico nem no --force-media-title do player.
 search_anime() {
+    _nsrc=0
+    for _src in $sources; do _nsrc=$((_nsrc + 1)); done
+    _all=""
     for _src in $sources; do
         _results=$("${_src}_search" "$1")
         [ -z "$_results" ] && continue
-        printf '%s\n' "$_results" | sed "s|^|${_src}:|"
-        return 0
+        _results=$(printf '%s\n' "$_results" |
+            awk -F'\t' -v s="$_src" -v multi="$_nsrc" \
+                'NF { sfx = (multi > 1) ? " [" s "]" : ""; print s ":" $1 "\t" $2 sfx }')
+        _all="${_all:+${_all}
+}${_results}"
     done
+    [ -z "$_all" ] && return 1
+    printf '%s\n' "$_all"
 }
 
 episodes_list() {
@@ -186,7 +202,16 @@ get_episode_url() {
     fi
     # alguns provedores HLS servem segmentos com extensao falsa (.webp); mpv/ffmpeg novos
     # rejeitam por extension_picky -> desliga so nessas fontes (inofensivo nas demais)
+    src_dl_opts=""
     case "$_src" in
+        # o AnimeFire toca por playlist HLS local (ver _animefire_hls): a playlist
+        # e file:// mas os segmentos sao https -> precisa liberar o protocolo; e
+        # os segmentos vem com extensao .jpg -> precisa liberar a extensao nas
+        # duas listas que o ffmpeg 8 usa e desligar o extension_picky
+        animefire)
+            src_play_opts="--demuxer-lavf-o-append=protocol_whitelist=file,http,https,tcp,tls,crypto --demuxer-lavf-o-append=allowed_extensions=ALL --demuxer-lavf-o-append=allowed_segment_extensions=ALL --demuxer-lavf-o-append=extension_picky=0"
+            src_dl_opts="-protocol_whitelist file,http,https,tcp,tls,crypto -allowed_extensions ALL -allowed_segment_extensions ALL"
+            ;;
         animesdigital | topanimes) src_play_opts="--demuxer-lavf-o=extension_picky=0" ;;
         *) src_play_opts="" ;;
     esac
@@ -203,36 +228,156 @@ select_quality() {
     episode=$(printf "%s" "$result" | cut -d'>' -f2)
 }
 
-# --- Fonte: AnimeFire (animefire.plus) ---
-# Paginas HTML: /pesquisar/{consulta} e /animes/{slug}-todos-os-episodios
-# Video (JSON): /video/{slug}/{ep} -> {"data":[{"src","label"}],"response":{"status"}}
+# --- Fonte: AnimeFire (animefire.io) ---
+# Reescrito 2026-09-07: o site virou Angular SSR e a API mudou de host. Busca e
+# lista de episodios saem do JSON server-rendered <script id="ng-state"> embutido
+# no HTML (/animes/pesquisar?q={q} e /anime/{id}); o video vem de
+# api.animefire.io/episode/{ep_id}?v=2 -> .data.streams[] = {audio,url,qualities},
+# sem auth/nonce/token. O stream e MPEG-DASH (manifesto servido como .jpg) com os
+# segmentos disfarcados de .jpg -> exige extension_picky=0 no playback.
+
+# O ng-state fica numa linha so e NAO e o ultimo <script> da pagina: recorta o
+# prefixo e corta no primeiro fechamento (o s/// do sed pega a ocorrencia mais a
+# esquerda, entao ".*" depois de </script> nao come os scripts seguintes).
+_animefire_state() {
+    sed -n 's/.*<script id="ng-state" type="application\/json">//p' |
+        sed 's|</script>.*||'
+}
 
 animefire_search() {
-    # o main separa palavras com '+'; o AnimeFire usa '-'
-    _query=$(printf '%s' "$1" | tr '+ ' '--')
-    _results=$(curl -sL -A "$agent" "$animefire_base/pesquisar/$_query" |
-        sed 's|<a href="[^"]*/animes/|\n|g' |
-        sed -nE 's|^([a-z0-9-]+)-todos-os-episodios">.*animeTitle">([^<]*)</h3>.*|\1\t\2|p')
-    # --dub mantem apenas as entradas dubladas (slug termina em -dublado);
-    # o titulo ja vem rotulado com "(Dublado)" pelo proprio site
-    [ "$mode" = "dub" ] && _results=$(printf '%s' "$_results" | grep -- '-dublado')
+    # o main ja entrega a consulta separada por '+', que e o que a query string espera
+    _results=$(curl -sL -A "$agent" "$animefire_base/animes/pesquisar?q=$1" |
+        _animefire_state |
+        jq -r '.[] | objects | .b?.data? | arrays | .[]
+            | select(.id and .title) | "\(.id)\t\(.title) (\(.audio))"' 2>/dev/null)
+    # --dub mantem so os titulos com faixa dublada (rotulo vem do campo audio)
+    [ "$mode" = "dub" ] && _results=$(printf '%s' "$_results" | grep -i 'Dublado')
     printf '%s' "$_results"
 }
 
+# numero<TAB>id_do_episodio, na ordem em que a serie lista
+_animefire_eplist() {
+    curl -sL -A "$agent" "$animefire_base/anime/$1" |
+        _animefire_state |
+        jq -r '.[] | objects | .b?.data? | objects | .episodes? | arrays | .[]
+            | "\(.number)\t\(.id)"' 2>/dev/null
+}
+
 animefire_episodes() {
-    curl -sL -A "$agent" "$animefire_base/animes/$1-todos-os-episodios" |
-        grep -oE "/animes/$1/[0-9]+(\.[0-9]+)?" |
-        sed 's|.*/||' | sort -n -u
+    _animefire_eplist "$1" | cut -f1 | sort -n -u
+}
+
+# O AnimeFire serve MPEG-DASH com o manifesto nomeado .jpg: o mpv abre isso como
+# imagem, e o ffmpeg de muitas distros nem traz demuxer DASH (o do Homebrew so
+# tem hls e webm_dash_manifest). Os segmentos, porem, sao fMP4 numerados, entao
+# da para reescrever o MPD como HLS local -- formato que todo ffmpeg demuxa.
+# Escreve em $2: a.m3u8 (o audio e stream separado no DASH), v<altura>.m3u8 por
+# qualidade e m<altura>.m3u8 amarrando as duas via EXT-X-MEDIA. Imprime
+# "<altura> ><master>" da maior para a menor, que e o contrato de _episode_url --
+# entao -q e change_quality passam a funcionar de verdade nesta fonte.
+# Depende das opcoes de demuxer que src_play_opts define para animefire.
+_animefire_hls() {
+    # $1 = xml do MPD, $2 = diretorio de saida, $3 = origem (scheme://host)
+    printf '%s' "$1" | tr '\n' ' ' | sed 's|<|\n<|g' | sed 's/[[:space:]][[:space:]]*/ /g' |
+        awk -v dir="$2" -v origin="$3" '
+            function attr(s, a,   r) {
+                r = ""
+                if (match(s, a "=\"[^\"]*\"")) r = substr(s, RSTART + length(a) + 2, RLENGTH - length(a) - 3)
+                return r
+            }
+            function dur2s(d,   h, m, sec) {
+                sub(/^PT/, "", d); h = 0; m = 0; sec = 0
+                if (match(d, /[0-9.]+H/)) h = substr(d, RSTART, RLENGTH - 1) + 0
+                if (match(d, /[0-9.]+M/)) m = substr(d, RSTART, RLENGTH - 1) + 0
+                if (match(d, /[0-9.]+S/)) sec = substr(d, RSTART, RLENGTH - 1) + 0
+                return h * 3600 + m * 60 + sec
+            }
+            function playlist(kind, rep, f,   n, i, seg, left, d, u, med, ini) {
+                seg = sdur[kind] / (ts[kind] ? ts[kind] : 1)
+                if (seg <= 0) return 0
+                n = int(total / seg); if (n * seg < total - 0.001) n++
+                med = media[kind]; ini = init[kind]
+                gsub(/\$RepresentationID\$/, rep, med); gsub(/\$RepresentationID\$/, rep, ini)
+                print "#EXTM3U" > (f)
+                print "#EXT-X-VERSION:7" > (f)
+                print "#EXT-X-PLAYLIST-TYPE:VOD" > (f)
+                printf "#EXT-X-TARGETDURATION:%d\n", (seg == int(seg) ? seg : int(seg) + 1) > (f)
+                printf "#EXT-X-MEDIA-SEQUENCE:%d\n", start[kind] > (f)
+                printf "#EXT-X-MAP:URI=\"%s%s\"\n", origin, ini > (f)
+                for (i = 0; i < n; i++) {
+                    left = total - i * seg; d = (left < seg ? left : seg)
+                    u = med; gsub(/\$Number\$/, start[kind] + i, u)
+                    printf "#EXTINF:%.3f,\n%s%s\n", d, origin, u > (f)
+                }
+                print "#EXT-X-ENDLIST" > (f)
+                close(f)
+                return n
+            }
+            /^<MPD/ { total = dur2s(attr($0, "mediaPresentationDuration")) }
+            /^<AdaptationSet/ { cur = attr($0, "contentType") }
+            /^<SegmentTemplate/ && cur != "" {
+                media[cur] = attr($0, "media"); init[cur] = attr($0, "initialization")
+                sdur[cur] = attr($0, "duration") + 0; ts[cur] = attr($0, "timescale") + 0
+                start[cur] = attr($0, "startNumber") + 0
+            }
+            /^<Representation/ && cur == "audio" && arep == "" {
+                arep = attr($0, "id"); acodec = attr($0, "codecs")
+            }
+            /^<Representation/ && cur == "video" {
+                nv++; vid[nv] = attr($0, "id"); vh[nv] = attr($0, "height") + 0
+                vw[nv] = attr($0, "width") + 0; vbw[nv] = attr($0, "bandwidth") + 0
+                vc[nv] = attr($0, "codecs")
+            }
+            END {
+                if (total <= 0 || nv == 0 || arep == "" || media["video"] == "" || media["audio"] == "") exit 1
+                playlist("audio", arep, dir "/a.m3u8")
+                # ordena por altura desc (insertion sort; sao 3-4 itens)
+                for (i = 2; i <= nv; i++)
+                    for (j = i; j > 1 && vh[j] > vh[j - 1]; j--) {
+                        tmp = vid[j]; vid[j] = vid[j - 1]; vid[j - 1] = tmp
+                        tmp = vh[j];  vh[j]  = vh[j - 1];  vh[j - 1]  = tmp
+                        tmp = vw[j];  vw[j]  = vw[j - 1];  vw[j - 1]  = tmp
+                        tmp = vbw[j]; vbw[j] = vbw[j - 1]; vbw[j - 1] = tmp
+                        tmp = vc[j];  vc[j]  = vc[j - 1];  vc[j - 1]  = tmp
+                    }
+                for (i = 1; i <= nv; i++) {
+                    vf = dir "/v" vh[i] ".m3u8"; mf = dir "/m" vh[i] ".m3u8"
+                    playlist("video", vid[i], vf)
+                    print "#EXTM3U" > (mf)
+                    print "#EXT-X-VERSION:7" > (mf)
+                    printf "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"audio\",DEFAULT=YES,AUTOSELECT=YES,URI=\"a.m3u8\"\n" > (mf)
+                    printf "#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS=\"%s,%s\",RESOLUTION=%dx%d,AUDIO=\"a\"\n", vbw[i], vc[i], acodec, vw[i], vh[i] > (mf)
+                    printf "v%d.m3u8\n", vh[i] > (mf)
+                    close(mf)
+                    printf "%d >%s\n", vh[i], mf
+                }
+            }'
 }
 
 animefire_episode_url() {
-    # $1 = slug, $2 = episodio
-    _resp=$(curl -sL -A "$agent" -e "$animefire_base/" \
-        -H "X-Requested-With: XMLHttpRequest" "$animefire_base/video/$1/$2")
-    # status 500 / corpo vazio => episodio inexistente ou indisponivel
-    printf '%s' "$_resp" | grep -q '"status":"200"' || return 0
-    # data[].src ja e link direto (.mp4/.m3u8 do lightspeedst; googlevideo p/ Blogger)
-    printf '%s' "$_resp" | jq -r '.data[]? | "\(.label) >\(.src)"' 2>/dev/null | sort -nr
+    # $1 = id do anime, $2 = numero do episodio
+    _eid=$(_animefire_eplist "$1" | awk -F'\t' -v n="$2" '$1 == n {print $2; exit}')
+    [ -z "$_eid" ] && return 0
+    _want=legendado
+    [ "$mode" = "dub" ] && _want=dublado
+    _resp=$(curl -sL -A "$agent" -e "$animefire_base/" "$animefire_api/episode/$_eid?v=2")
+    # streams[].url vem null quando a faixa consta no catalogo mas nao esta hospedada:
+    # pede a faixa do $mode primeiro e cai nas demais em seguida
+    for _u in $(printf '%s' "$_resp" | jq -r --arg a "$_want" '
+        [.data.streams[]? | select(.url != null)] as $s
+        | (($s[] | select(.audio == $a)), $s[]) | .url' 2>/dev/null | awk '!seen[$0]++'); do
+        _mpd=$(curl -sL -A "$agent" -e "$animefire_base/" --max-time 20 "$_u")
+        # url nao-nula tambem nao garante stream vivo: ha faixa catalogada que da
+        # 404 no CDN (ep com dublado ok e legendado morto). Buscar o MPD ja serve
+        # de teste de vida e evita uma requisicao extra so para checar.
+        printf '%s' "$_mpd" | grep -q '<MPD' || continue
+        _dir="$hls_dir/$_eid"
+        mkdir -p "$_dir" || continue
+        _out=$(_animefire_hls "$_mpd" "$_dir" "$(printf '%s' "$_u" | cut -d/ -f1-3)")
+        [ -z "$_out" ] && continue
+        printf '%s\n' "$_out"
+        return 0
+    done
 }
 
 # --- Fonte: AnimesROLL (anroll.info) ---
@@ -429,7 +574,8 @@ download() {
             if command -v "yt-dlp" >/dev/null; then
                 yt-dlp --referer "$m3u8_refr" "$1" --no-skip-unavailable-fragments --fragment-retries infinite -N 16 -o "$download_dir/$2.mp4"
             else
-                ffmpeg -extension_picky 0 -referer "$m3u8_refr" -loglevel error -stats -i "$1" -c copy "$download_dir/$2.mp4"
+                # shellcheck disable=SC2086
+                ffmpeg -extension_picky 0 $src_dl_opts -referer "$m3u8_refr" -loglevel error -stats -i "$1" -c copy "$download_dir/$2.mp4"
             fi
             ;;
         *)
@@ -532,6 +678,7 @@ play() {
 # setup
 agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefox/150.0"
 animefire_base="${ANI_CLI_ANIMEFIRE_BASE:-https://animefire.io}"
+animefire_api="${ANI_CLI_ANIMEFIRE_API:-https://api.animefire.io}"
 anroll_base="${ANI_CLI_ANROLL_BASE:-https://www.anroll.info}"
 animesdigital_base="${ANI_CLI_ANIMESDIGITAL_BASE:-https://animesdigital.org}"
 topanimes_base="${ANI_CLI_TOPANIMES_BASE:-https://topanimes.net}"
@@ -559,6 +706,8 @@ skip_title="${ANI_CLI_SKIP_TITLE:-}"
 hist_dir="${ANI_CLI_HIST_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/ani-br}"
 [ ! -d "$hist_dir" ] && mkdir -p "$hist_dir"
 histfile="$hist_dir/ani-hsts"
+# playlists HLS geradas para o AnimeFire; removidas no cleanup
+hls_dir="${TMPDIR:-/tmp}/ani-br-hls.$$"
 [ ! -f "$histfile" ] && : >"$histfile"
 search="${ANI_CLI_DEFAULT_SOURCE:-scrape}"
 branch="${ANI_CLI_BRANCH:-master}"
@@ -656,6 +805,9 @@ esac
 
 # idk where to put this, so I put it here...
 trap 'cleanup; exit 1' INT HUP
+# o caminho debug/download sai sem passar pelo menu, entao so o trap de EXIT
+# garante a remocao das playlists temporarias (cleanup e idempotente)
+trap 'cleanup' EXIT
 
 # searching
 case "$search" in
@@ -689,9 +841,10 @@ case "$search" in
         [ "$index" -eq "$index" ] 2>/dev/null && result=$(printf "%s" "$anime_list" | sed -n "${index}p")
         [ -z "$index" ] && result=$(printf "%s" "$anime_list" | nl -w 2 | sed 's/^[[:space:]]//' | nth "Select anime: ")
         [ -z "$result" ] && exit 1
-        title=$(printf "%s" "$result" | cut -f2)
-        media_title="$(printf "%s" "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
         id=$(printf "%s" "$result" | cut -f1)
+        # remove o rotulo " [fonte]" que existe so para desambiguar a listagem
+        title=$(printf "%s" "$result" | cut -f2 | sed "s| \[${id%%:*}\]\$||")
+        media_title="$(printf "%s" "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
         ep_list=$(episodes_list "$id")
         [ -z "$ep_no" ] && ep_no=$(printf "%s" "$ep_list" | nth "Select episode: " "$multi_selection_flag")
         [ -z "$ep_no" ] && exit 1

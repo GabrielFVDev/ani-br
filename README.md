@@ -73,16 +73,37 @@ Durante a reprodução, o menu permite `next` / `previous` / `replay` / `select`
 
 ## Fontes suportadas
 
-Consultadas em ordem de prioridade, com fallback automático por anime:
+Todas as fontes são consultadas a cada busca e os resultados são concatenados
+na ordem de prioridade abaixo — uma série que só existe na 4ª fonte aparece
+mesmo que a 1ª já tenha respondido algo:
 
-| Prioridade | Fonte | Domínio | Vídeo | Dublado |
-|---|---|---|---|---|
-| 1ª | **AnimesDigital** | `animesdigital.org` | HLS (`.m3u8`) | sim |
-| 2ª | **AnimesROLL** | `www.anroll.info` | HLS (`.m3u8`) | sim (`-dublado`) |
-| 3ª | **AnimeFire** | `animefire.io` | MP4 direto | sim (`-dublado`) |
-| 4ª | **TopAnimes** | `topanimes.net` | HLS (`.m3u8`) | sim |
+| Prioridade | Fonte | Domínio | Vídeo | Dublado | Estado |
+|---|---|---|---|---|---|
+| 1ª | **AnimesDigital** | `animesdigital.org` | HLS (`.m3u8`) | sim | ok |
+| 2ª | **AnimesROLL** | `www.anroll.info` | HLS (`.m3u8`) | sim (`-dublado`) | **fora do ar** |
+| 3ª | **AnimeFire** | `animefire.io` | DASH → HLS local | sim (faixa própria) | ok |
+| 4ª | **TopAnimes** | `topanimes.net` | HLS (`.m3u8`) | sim | parcial |
+
+Notas de estado (set/2026):
+
+- **AnimesROLL** virou SPA e não expõe mais busca raspável; fica na lista sem
+  retornar resultados até alguém remapear a fonte.
+- **TopAnimes** serve parte do catálogo por um player atrás de FingerprintJS,
+  que não cede a `curl`; nesses títulos o episódio lista mas não toca.
+- **AnimeFire** entrega MPEG-DASH com o manifesto e os segmentos nomeados
+  `.jpg`. O `ani-br` reescreve o manifesto como playlist HLS local antes de
+  entregar ao player — o mpv abriria o original como imagem, e a maioria dos
+  builds de ffmpeg (incluindo o do Homebrew) nem traz demuxer DASH. Como o
+  DASH separa as faixas, é a única fonte em que `-q`/`change_quality` escolhe
+  de verdade entre 480p/720p/1080p, e em que sub/dub vem de faixas distintas
+  do mesmo episódio em vez de entradas separadas no catálogo.
+
+Com mais de uma fonte ativa, o título na lista recebe o sufixo `[fonte]` para
+distinguir homônimos; ele é só rótulo de exibição e não entra no histórico nem
+no título da janela do player.
 
 Reordene ou restrinja com `ANI_CLI_SOURCES` (veja [Configuração](#configuração)).
+Restringir a uma fonte deixa a busca mais rápida e remove o sufixo `[fonte]`.
 
 ## Configuração
 
@@ -90,7 +111,8 @@ Opções fixáveis por variável de ambiente (prefixo `ANI_CLI_`):
 
 | Variável | Para quê |
 |---|---|
-| `ANI_CLI_SOURCES` | Ordem/seleção de fontes. Ex.: `ANI_CLI_SOURCES="anroll" ani-br ...` |
+| `ANI_CLI_SOURCES` | Ordem/seleção de fontes. Ex.: `ANI_CLI_SOURCES="animefire" ani-br ...` |
+| `ANI_CLI_ANIMEFIRE_API` | Host da API do AnimeFire (padrão `https://api.animefire.io`) |
 | `ANI_CLI_PLAYER` | Player a usar. Ex.: `export ANI_CLI_PLAYER=mpv` |
 | `ANI_CLI_QUALITY` | Qualidade padrão (`best`/`worst`/`720`...) |
 | `ANI_CLI_MODE` | `sub` (padrão) ou `dub` |
